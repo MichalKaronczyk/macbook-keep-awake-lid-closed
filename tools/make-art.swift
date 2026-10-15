@@ -186,23 +186,109 @@ struct Row {
     var kind: Kind
     var title: String = ""
     var trailing: String = ""
+    /// Draws a ✓ in the leading gutter.
     var checked = false
+    /// Green highlight bar — the master switch.
+    var highlighted = false
+    /// Neutral highlight — a submenu parent that is currently open.
+    var open = false
     var chevron = false
 }
 
+let rowPadH: CGFloat = 14
+
+func rowHeight(_ row: Row) -> CGFloat {
+    switch row.kind {
+    case .separator: return 11
+    case .info, .warning: return 19
+    case .header: return 26
+    case .item: return 25
+    }
+}
+
+func panelHeight(_ rows: [Row], topPad: CGFloat = 10, bottomPad: CGFloat = 10) -> CGFloat {
+    rows.reduce(topPad + bottomPad) { $0 + rowHeight($1) }
+}
+
+/// Draws a macOS-style menu panel. `top` is the y of its upper edge.
+func drawPanel(_ rows: [Row], x: CGFloat, top: CGFloat, width: CGFloat) {
+    let height = panelHeight(rows)
+    let panel = NSRect(x: x, y: top - height, width: width, height: height)
+    let path = roundedRect(panel, 11)
+
+    NSGraphicsContext.saveGraphicsState()
+    let shadow = NSShadow()
+    shadow.shadowColor = NSColor.black.withAlphaComponent(0.55)
+    shadow.shadowBlurRadius = 24
+    shadow.shadowOffset = NSSize(width: 0, height: -6)
+    shadow.set()
+    hex(0x1F232B).setFill()
+    path.fill()
+    NSGraphicsContext.restoreGraphicsState()
+
+    fillGradient(path, hex(0x2A2E37), hex(0x1E222A), angle: 270)
+    hex(0xFFFFFF, 0.09).setStroke()
+    path.lineWidth = 1
+    path.stroke()
+
+    var y = panel.maxY - 10
+    for row in rows {
+        let rh = rowHeight(row)
+        y -= rh
+        let baseline = y + (rh - 15) / 2 + 1
+        let tx = panel.minX + rowPadH
+
+        switch row.kind {
+        case .separator:
+            hex(0xFFFFFF, 0.10).setFill()
+            NSRect(x: panel.minX + 10, y: y + rh / 2, width: width - 20, height: 1).fill()
+
+        case .header:
+            text(row.title, NSPoint(x: tx, y: baseline), size: 12.5, weight: .semibold,
+                 color: hex(0xF2F4F8))
+
+        case .info:
+            text(row.title, NSPoint(x: tx, y: baseline + 1), size: 11, color: subtle)
+
+        case .warning:
+            text("⚠︎ " + row.title, NSPoint(x: tx, y: baseline + 1), size: 11, color: hex(0xF59E0B))
+
+        case .item:
+            if row.highlighted || row.open {
+                (row.highlighted ? hex(0x2F6B4F, 0.55) : hex(0x3A4150, 0.75)).setFill()
+                roundedRect(NSRect(x: panel.minX + 5, y: y + 1,
+                                   width: width - 10, height: rh - 2), 6).fill()
+            }
+            if row.checked {
+                text("✓", NSPoint(x: tx - 2, y: baseline), size: 12.5, weight: .bold,
+                     color: row.highlighted ? leafGreen : hex(0xD7DCE5))
+            }
+            text(row.title, NSPoint(x: tx + 18, y: baseline), size: 12.5, color: hex(0xF2F4F8))
+            if !row.trailing.isEmpty {
+                textRight(row.trailing, rightX: panel.maxX - rowPadH, y: baseline, size: 12.5,
+                          color: hex(0x9BA3B1))
+            }
+            if row.chevron {
+                textRight("›", rightX: panel.maxX - rowPadH, y: baseline - 1, size: 14,
+                          color: hex(0x9BA3B1))
+            }
+        }
+    }
+}
+
 func makeMenu() -> NSBitmapImageRep {
-    let rows: [Row] = [
-        Row(kind: .header, title: "Agent mode — 2:14:03 left · 4.2 W (−3.1 W)"),
-        Row(kind: .info, title: "At this rate, ~5h 10m left"),
+    let main: [Row] = [
+        Row(kind: .header, title: "Agent mode · ~5h 10m of work left"),
+        Row(kind: .info, title: "Timer: 2:14:03 left"),
         Row(kind: .separator),
-        Row(kind: .item, title: "Agent mode", trailing: "⌘K", checked: true),
+        Row(kind: .item, title: "Agent mode", trailing: "⌘K", checked: true, highlighted: true),
         Row(kind: .item, title: "Extend by 30 minutes"),
         Row(kind: .separator),
-        Row(kind: .item, title: "Power saving", chevron: true),
+        Row(kind: .item, title: "Power saving", open: true, chevron: true),
         Row(kind: .item, title: "Keep awake", chevron: true),
         Row(kind: .item, title: "Energy hogs", chevron: true),
         Row(kind: .separator),
-        Row(kind: .info, title: "battery · 53% · 4.2 W"),
+        Row(kind: .info, title: "battery · 53% · ~5h 20m"),
         Row(kind: .info, title: "Claude Code: 2 processes"),
         Row(kind: .info, title: "Restricted: 9 frozen (20 processes)"),
         Row(kind: .separator),
@@ -212,27 +298,43 @@ func makeMenu() -> NSBitmapImageRep {
         Row(kind: .item, title: "Quit", trailing: "⌘Q"),
     ]
 
-    let menuWidth: CGFloat = 380
-    let padH: CGFloat = 14
+    let submenu: [Row] = [
+        Row(kind: .info, title: "Power draw: 4.2 W (−3.1 W)"),
+        Row(kind: .info, title: "Before power saving: 7.3 W"),
+        Row(kind: .separator),
+        Row(kind: .item, title: "Power saving on", checked: true),
+        Row(kind: .item, title: "Aggressive mode (freeze apps)"),
+        Row(kind: .info, title: "taskpolicy: efficiency cores, ~2x slower"),
+        Row(kind: .separator),
+        Row(kind: .item, title: "Manage apps", chevron: true),
+        Row(kind: .separator),
+        Row(kind: .item, title: "Arm when the lid closes", checked: true),
+        Row(kind: .item, title: "Turn the display off on start"),
+        Row(kind: .item, title: "Turn the display off now"),
+        Row(kind: .separator),
+        Row(kind: .item, title: "Low Power Mode (admin password)"),
+        Row(kind: .item, title: "Pause Spotlight (admin password)"),
+    ]
+
+    let mainWidth: CGFloat = 380
+    let subWidth: CGFloat = 268
     let barHeight: CGFloat = 30
     let gap: CGFloat = 8
-    let topPad: CGFloat = 10
-    let bottomPad: CGFloat = 10
+    let rightMargin: CGFloat = 16
 
-    func height(_ row: Row) -> CGFloat {
-        switch row.kind {
-        case .separator: return 11
-        case .info, .warning: return 19
-        case .header: return 26
-        case .item: return 25
-        }
+    // How far down the main panel the opened submenu starts.
+    var subOffset: CGFloat = 10
+    for row in main {
+        if row.open { break }
+        subOffset += rowHeight(row)
     }
-    let menuHeight = rows.reduce(topPad + bottomPad) { $0 + height($1) }
-    let w = menuWidth + 80
-    let h = barHeight + gap + menuHeight + 40
+
+    let w = rightMargin + mainWidth + subWidth - 4 + 40
+    // The canvas has to clear whichever panel reaches lower.
+    let deepest = max(panelHeight(main), subOffset - 6 + panelHeight(submenu))
+    let h = barHeight + gap + deepest + 28
 
     return canvas(w, h, scale: 2) {
-        // Page background
         pageBG.setFill()
         NSRect(x: 0, y: 0, width: w, height: h).fill()
 
@@ -242,74 +344,19 @@ func makeMenu() -> NSBitmapImageRep {
         hex(0xFFFFFF, 0.07).setFill()
         NSRect(x: 0, y: h - barHeight, width: w, height: 1).fill()
 
-        let markBox = NSRect(x: w - 196, y: h - barHeight + 6, width: 17, height: 18)
-        drawMark(in: markBox, laptop: false, monochrome: hex(0xE6E9EF))
-        text("2:14 · 4.2W", NSPoint(x: w - 174, y: h - barHeight + 8), size: 12, color: hex(0xE6E9EF))
+        drawMark(in: NSRect(x: w - 190, y: h - barHeight + 6, width: 17, height: 18),
+                 laptop: false, monochrome: hex(0xE6E9EF))
+        text("2:14 · ~5:10", NSPoint(x: w - 168, y: h - barHeight + 8), size: 12,
+             color: hex(0xE6E9EF))
         textRight("Thu 14:22", rightX: w - 16, y: h - barHeight + 8, size: 12, color: hex(0xC3C9D4))
 
-        // --- Dropdown panel
-        let panel = NSRect(x: w - 16 - menuWidth, y: h - barHeight - gap - menuHeight,
-                           width: menuWidth, height: menuHeight)
-        let panelPath = roundedRect(panel, 11)
+        // --- The dropdown, with the Power saving submenu opened to its left
+        // (macOS flips submenus leftwards near the right edge of the screen).
+        let mainX = w - rightMargin - mainWidth
+        let mainTop = h - barHeight - gap
+        drawPanel(main, x: mainX, top: mainTop, width: mainWidth)
 
-        // Drop shadow
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.55)
-        shadow.shadowBlurRadius = 24
-        shadow.shadowOffset = NSSize(width: 0, height: -6)
-        shadow.set()
-        hex(0x1F232B).setFill()
-        panelPath.fill()
-        NSGraphicsContext.restoreGraphicsState()
-
-        fillGradient(panelPath, hex(0x2A2E37), hex(0x1E222A), angle: 270)
-        hex(0xFFFFFF, 0.09).setStroke()
-        panelPath.lineWidth = 1
-        panelPath.stroke()
-
-        var y = panel.maxY - topPad
-        for row in rows {
-            let rh = height(row)
-            y -= rh
-            let baseline = y + (rh - 15) / 2 + 1
-            let x = panel.minX + padH
-
-            switch row.kind {
-            case .separator:
-                hex(0xFFFFFF, 0.10).setFill()
-                NSRect(x: panel.minX + 10, y: y + rh / 2, width: menuWidth - 20, height: 1).fill()
-
-            case .header:
-                text(row.title, NSPoint(x: x, y: baseline), size: 12.5, weight: .semibold,
-                     color: hex(0xF2F4F8))
-
-            case .info:
-                text(row.title, NSPoint(x: x, y: baseline + 1), size: 11, color: subtle)
-
-            case .warning:
-                text("⚠︎ " + row.title, NSPoint(x: x, y: baseline + 1), size: 11, color: hex(0xF59E0B))
-
-            case .item:
-                if row.checked {
-                    // Highlighted master row
-                    hex(0x2F6B4F, 0.55).setFill()
-                    roundedRect(NSRect(x: panel.minX + 5, y: y + 1,
-                                       width: menuWidth - 10, height: rh - 2), 6).fill()
-                    text("✓", NSPoint(x: x - 2, y: baseline), size: 12.5, weight: .bold, color: leafGreen)
-                }
-                text(row.title, NSPoint(x: x + 18, y: baseline), size: 12.5,
-                     color: hex(0xF2F4F8))
-                if !row.trailing.isEmpty {
-                    textRight(row.trailing, rightX: panel.maxX - padH, y: baseline, size: 12.5,
-                              color: hex(0x9BA3B1))
-                }
-                if row.chevron {
-                    textRight("›", rightX: panel.maxX - padH, y: baseline - 1, size: 14,
-                              color: hex(0x9BA3B1))
-                }
-            }
-        }
+        drawPanel(submenu, x: mainX - subWidth + 4, top: mainTop - subOffset + 6, width: subWidth)
     }
 }
 
@@ -347,7 +394,8 @@ func makeHero() -> NSBitmapImageRep {
         // Chips
         var cx = left
         for (label, color) in [("Swift", hex(0xF05138)), ("macOS 13+", hex(0x60A5FA)),
-                               ("No root required", leafGreen), ("MIT", hex(0xA78BFA))] {
+                               ("No root required", leafGreen),
+                               ("Free, non-commercial", hex(0xA78BFA))] {
             let tw = width(label, size: 13, weight: .medium)
             let chip = NSRect(x: cx, y: 54, width: tw + 34, height: 30)
             let path = roundedRect(chip, 15)

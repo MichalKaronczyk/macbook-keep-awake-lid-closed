@@ -7,8 +7,8 @@ The long version of the [README](../README.md).
 Clicking the icon pops the menu directly underneath it.
 
 ```
-🍃 Agent mode — 2:14:03 left · 4.2 W (−3.1 W)
-   At this rate, ~5h 10m left
+🍃 Agent mode · ~5h 10m of work left
+   Timer: 2:14:03 left
    ─────────────────────────────
  ✓ Agent mode                               ⌘K
    Extend by 30 minutes
@@ -17,7 +17,7 @@ Clicking the icon pops the menu directly underneath it.
    Keep awake                                ▸
    Energy hogs                               ▸
    ─────────────────────────────
-   battery · 53% · 4.2 W
+   battery · 53% · ~5h 20m
    Claude Code: 2 processes
    Restricted: 9 frozen (20 processes)
    ─────────────────────────────
@@ -78,9 +78,9 @@ every daemon and system process without a Dock icon — that's the main safety n
 
 | Feature | Detail |
 |---|---|
-| **Live power draw** | Real watts from the battery controller (`AppleSmartBattery`: `Amperage` × `Voltage`), not a guess. Shown in the menu bar. |
+| **Live power draw** | Real watts from the battery controller (`AppleSmartBattery`: `Amperage` × `Voltage`), not a guess. Shown under **Power saving** — watts on their own say little, so the headline carries the time estimate instead. |
 | **Savings counter** | Remembers the draw from before power saving and shows the delta: `4.2 W (−3.1 W)`. |
-| **Runtime forecast** | Drain rate (%/h) from sample history → "~5h 10m left" down to your battery floor. |
+| **Runtime forecast** | Drain rate (%/h) from sample history → "~5h 10m of work left" down to your battery floor, shown in the headline and the menu bar. Falls back to the macOS estimate until there is enough history. |
 | **Energy hogs** | Top 7 apps by CPU, **helpers included**. One click freezes one. |
 | **Auto on lid close** | `screensDidSleep` → engages power saving; `screensDidWake` → restores immediately. |
 | **Auto with Claude Code** | Holds the Mac awake while a `claude` process is alive, plus a configurable grace period (2 min by default) for gaps between prompts. |

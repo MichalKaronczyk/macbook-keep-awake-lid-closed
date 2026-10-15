@@ -18,7 +18,7 @@ enum Preferences {
         static let aggressiveSaving = "aggressiveSaving"
         static let autoArmOnLidClose = "autoArmOnLidClose"
         static let displayOffOnEngage = "displayOffOnEngage"
-        static let showWattsInMenuBar = "showWattsInMenuBar"
+        static let showRuntimeInMenuBar = "showRuntimeInMenuBar"
         static let useLowPowerMode = "useLowPowerMode"
         static let pauseSpotlight = "pauseSpotlight"
     }
@@ -38,7 +38,7 @@ enum Preferences {
             Key.aggressiveSaving: false,       // throttle only by default, no SIGSTOP
             Key.autoArmOnLidClose: true,
             Key.displayOffOnEngage: false,
-            Key.showWattsInMenuBar: true,
+            Key.showRuntimeInMenuBar: true,
             Key.useLowPowerMode: false,        // needs a password, so opt-in
             Key.pauseSpotlight: false,
         ])
@@ -62,9 +62,10 @@ enum Preferences {
         set { d.set(newValue, forKey: Key.displayOffOnEngage) }
     }
 
-    static var showWattsInMenuBar: Bool {
-        get { d.bool(forKey: Key.showWattsInMenuBar) }
-        set { d.set(newValue, forKey: Key.showWattsInMenuBar) }
+    /// Show the estimated remaining work time in the menu bar.
+    static var showRuntimeInMenuBar: Bool {
+        get { d.bool(forKey: Key.showRuntimeInMenuBar) }
+        set { d.set(newValue, forKey: Key.showRuntimeInMenuBar) }
     }
 
     /// Turn on the system Low Power Mode together with agent mode.

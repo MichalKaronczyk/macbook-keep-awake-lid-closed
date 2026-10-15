@@ -1,16 +1,30 @@
-MIT License
+Claude Not Close — Source-Available Non-Commercial License
 
-Copyright (c) 2026 Claude Not Close contributors
+Copyright (c) 2026 Michal Karonczyk (https://github.com/MichalKaronczyk)
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to use, copy,
+modify, merge, publish and distribute copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the following
+conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Attribution.
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+2. No commercial sale.
+   You may not sell the Software, offer it for sale, rent, lease or license it
+   for a fee, nor distribute it as part of a product or service that is sold or
+   otherwise monetized, without prior written permission from the copyright
+   holder.
+
+   To be explicit: using the Software is free for everyone, including inside a
+   company and while doing paid work. What is not allowed is charging other
+   people for the Software itself.
+
+3. Derivative works.
+   Modified versions may be distributed under these same terms and must clearly
+   state that they have been changed.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,

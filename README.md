@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/macOS-13%2B-0A84FF" alt="macOS 13+">
   <img src="https://img.shields.io/badge/Swift-5.9-F05138" alt="Swift 5.9">
   <img src="https://img.shields.io/badge/deps-none-12B981" alt="No dependencies">
-  <img src="https://img.shields.io/badge/license-MIT-A78BFA" alt="MIT">
+  <img src="https://img.shields.io/badge/license-non--commercial-A78BFA" alt="Non-commercial license">
 </p>
 
 ---
@@ -23,8 +23,8 @@ outright — so the session doesn't eat your whole battery.
 ## Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/macbook-keep-awake-lid-closed.git
-cd macbook-keep-awake-lid-closed
+git clone https://github.com/MichalKaronczyk/macbook-keep-awake-lid-closed-.git
+cd macbook-keep-awake-lid-closed-
 ./install.sh
 ```
 
@@ -36,8 +36,9 @@ Builds, copies to `/Applications`, launches. For autostart: **Settings → Launc
 
 - **Agent mode** (`⌘K`, or ⌥-click the icon) — keeps the Mac awake *and* throttles
   everything outside the allowlist, in one switch.
-- **Real watts**, read from the battery controller — plus how much you're saving
-  right now and how long the charge will last.
+- **Time left, up front** — the headline tells you roughly how long you can keep
+  working. Real watts, read from the battery controller, sit one level down under
+  **Power saving**, next to the before/after comparison where the number means something.
 - **Auto on lid close** — arms itself when the display sleeps, restores instantly on wake.
 - **Auto with Claude Code** — holds the Mac awake while a `claude` process is alive,
   with a configurable grace period between prompts.
@@ -89,4 +90,8 @@ defaults delete eu.rynex-system.ClaudeNotClose
 
 ---
 
-**[How it works →](docs/how-it-works.md)** · MIT licensed · Not affiliated with Anthropic
+**[How it works →](docs/how-it-works.md)**
+
+By [@MichalKaronczyk](https://github.com/MichalKaronczyk). Free to use, modify and
+share — including at work. Selling it is not allowed; see [LICENSE](LICENSE).
+Not affiliated with Anthropic.

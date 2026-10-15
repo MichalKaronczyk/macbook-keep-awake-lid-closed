@@ -381,12 +381,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if Preferences.showCountdownInMenuBar, effectiveHold, let expiry = manualExpiry {
             bits.append(Format.compact(expiry.timeIntervalSinceNow))
         }
-        if Preferences.showWattsInMenuBar, !cachedPower.onACPower,
-           let watts = EnergyMonitor.smoothedWatts() {
-            bits.append(String(format: "%.1fW", watts))
+        if Preferences.showRuntimeInMenuBar, let left = projectedRuntime() {
+            bits.append("~" + Format.compact(left))
         }
         button.title = bits.isEmpty ? "" : " " + bits.joined(separator: " · ")
         button.toolTip = statusLine()
+    }
+
+    /// Estimated time left on battery: our own drain-rate forecast first, the macOS
+    /// estimate as a fallback while there is not enough history yet.
+    private func projectedRuntime() -> TimeInterval? {
+        guard !cachedPower.onACPower else { return nil }
+        if let projected = EnergyMonitor.projectedRuntime(
+            currentPercent: cachedPower.batteryPercent,
+            floorPercent: Preferences.batteryGuardEnabled ? Preferences.batteryGuardThreshold : 0),
+           projected > 0 {
+            return projected
+        }
+        if let minutes = cachedPower.minutesRemaining, minutes > 0 {
+            return TimeInterval(minutes * 60)
+        }
+        return nil
     }
 
     private func statusLine() -> String {
@@ -394,7 +409,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         var base: String
         if !effectiveHold {
-            base = Preferences.autoFollowClaude
+            return Preferences.autoFollowClaude
                 ? "Standing by — waiting for Claude Code"
                 : "Off — the Mac will sleep when the lid closes"
         } else if autoHold, !manualHold {
@@ -403,19 +418,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             } else {
                 base = "Active — Claude Code is working (\(lastClaudeCount))"
             }
-        } else if let expiry = manualExpiry {
-            base = "Agent mode — \(Format.clock(expiry.timeIntervalSinceNow)) left"
-        } else if let started = holdStartedAt {
-            base = "Agent mode — \(Format.duration(Date().timeIntervalSince(started)))"
         } else {
-            base = "Agent mode active"
+            base = "Agent mode"
         }
 
-        if let watts = EnergyMonitor.smoothedWatts() {
-            base += " · \(EnergyMonitor.formatWatts(watts))"
-            if let saved = EnergyMonitor.savedWatts() {
-                base += String(format: " (−%.1f W)", saved)
-            }
+        // Watts alone say little, so the headline is the thing you actually care
+        // about: how much working time is left. The draw itself lives in the
+        // Power saving submenu.
+        if let left = projectedRuntime() {
+            base += " · ~\(Format.duration(left)) of work left"
+        } else if cachedPower.onACPower {
+            base += " · on AC power"
         }
         return base
     }
@@ -444,11 +457,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // --- Header
         menu.addItem(bold(statusLine()))
-        if let projected = EnergyMonitor.projectedRuntime(
-            currentPercent: cachedPower.batteryPercent,
-            floorPercent: Preferences.batteryGuardEnabled ? Preferences.batteryGuardThreshold : 0),
-           !cachedPower.onACPower, projected > 0 {
-            menu.addItem(info("At this rate, ~\(Format.duration(projected)) left"))
+        if manualHold, let expiry = manualExpiry {
+            menu.addItem(info("Timer: \(Format.clock(expiry.timeIntervalSinceNow)) left"))
+        } else if effectiveHold, let started = holdStartedAt {
+            menu.addItem(info("Running for \(Format.duration(Date().timeIntervalSince(started)))"))
         }
 
         menu.addItem(.separator())
@@ -484,11 +496,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         // --- Info
-        var powerText = cachedPower.summary
-        if let watts = EnergyMonitor.smoothedWatts() {
-            powerText += " · \(EnergyMonitor.formatWatts(watts))"
-        }
-        menu.addItem(info(powerText))
+        menu.addItem(info(cachedPower.summary))
         menu.addItem(info(lastClaudeCount > 0
                           ? "Claude Code: \(lastClaudeCount) \(lastClaudeCount == 1 ? "process" : "processes")"
                           : "Claude Code: not running"))
@@ -516,6 +524,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func savingSubmenu() -> NSMenu {
         let sub = NSMenu()
+
+        // The actual power draw lives here rather than in the headline — the number
+        // only means something next to the before/after comparison.
+        if let watts = EnergyMonitor.smoothedWatts() {
+            var line = "Power draw: \(EnergyMonitor.formatWatts(watts))"
+            if let saved = EnergyMonitor.savedWatts() {
+                line += String(format: " (−%.1f W)", saved)
+            }
+            sub.addItem(info(line))
+            if let baseline = EnergyMonitor.baselineWatts {
+                sub.addItem(info("Before power saving: \(EnergyMonitor.formatWatts(baseline))"))
+            }
+            sub.addItem(.separator())
+        }
 
         let toggle = NSMenuItem(title: "Power saving on",
                                 action: #selector(togglePowerSaving), keyEquivalent: "")
@@ -773,11 +795,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         countdown.state = Preferences.showCountdownInMenuBar ? .on : .off
         sub.addItem(countdown)
 
-        let wattsItem = NSMenuItem(title: "Power draw in the menu bar",
-                                   action: #selector(toggleWatts), keyEquivalent: "")
-        wattsItem.target = self
-        wattsItem.state = Preferences.showWattsInMenuBar ? .on : .off
-        sub.addItem(wattsItem)
+        let runtimeItem = NSMenuItem(title: "Time left in the menu bar",
+                                     action: #selector(toggleRuntime), keyEquivalent: "")
+        runtimeItem.target = self
+        runtimeItem.state = Preferences.showRuntimeInMenuBar ? .on : .off
+        sub.addItem(runtimeItem)
 
         sub.addItem(.separator())
 
@@ -1018,8 +1040,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateButton()
     }
 
-    @objc private func toggleWatts() {
-        Preferences.showWattsInMenuBar.toggle()
+    @objc private func toggleRuntime() {
+        Preferences.showRuntimeInMenuBar.toggle()
         updateButton()
     }
 
