@@ -23,8 +23,8 @@ outright — so the session doesn't eat your whole battery.
 ## Install
 
 ```bash
-git clone https://github.com/MichalKaronczyk/macbook-keep-awake-lid-closed-.git
-cd macbook-keep-awake-lid-closed-
+git clone https://github.com/MichalKaronczyk/macbook-keep-awake-lid-closed.git
+cd macbook-keep-awake-lid-closed
 ./install.sh
 ```
 
