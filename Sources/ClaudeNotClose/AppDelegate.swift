@@ -47,6 +47,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// on wake we only lift what we put in place ourselves.
     private var powerSaveAutoArmed = false
 
+    /// Set when the system sleeps while we were supposed to be holding it awake. On
+    /// battery with the lid shut macOS wins over every IOKit assertion, which silently
+    /// kills the agent's network connection — we explain that after the wake.
+    private var sleptWhileHolding = false
+
     // MARK: - Telemetry and session
 
     private var lastClaudeCount = 0
@@ -132,6 +137,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                            name: NSWorkspace.screensDidSleepNotification, object: nil)
         center.addObserver(self, selector: #selector(screensDidWake),
                            name: NSWorkspace.screensDidWakeNotification, object: nil)
+        center.addObserver(self, selector: #selector(systemWillSleep),
+                           name: NSWorkspace.willSleepNotification, object: nil)
         center.addObserver(self, selector: #selector(systemDidWake),
                            name: NSWorkspace.didWakeNotification, object: nil)
     }
@@ -155,7 +162,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         stopPowerSaving(announce: true)
     }
 
+    /// We asked the system to stay awake and it is going under anyway.
+    @objc private func systemWillSleep() {
+        sleptWhileHolding = effectiveHold
+    }
+
     @objc private func systemDidWake() {
+        if sleptWhileHolding {
+            sleptWhileHolding = false
+            if !sleepManager.clamshellOverrideActive {
+                Notifier.post(title: "The Mac slept anyway",
+                              body: "On battery macOS ignores the keep-awake hold when the lid "
+                                  + "closes, so network connections were dropped. Turn on "
+                                  + "Keep awake -> Force on battery too to prevent it.")
+            }
+        }
         pollEnvironment()
     }
 
@@ -271,7 +292,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let timing = manualExpiry == nil ? "indefinitely" : "for \(Format.duration(duration))"
         Notifier.post(title: "Agent mode on",
                       body: "The Mac will stay awake \(timing). Power saving is active.")
+        offerForcedModeIfNeeded()
         refreshUI()
+    }
+
+    /// The one moment the user is still looking at the screen before walking away.
+    ///
+    /// On battery, closing the lid sleeps the Mac no matter what we assert, the network
+    /// goes down with it, and anything the agent was streaming dies mid-response. A
+    /// passive warning row in the menu is too easy to miss, so ask outright.
+    private func offerForcedModeIfNeeded() {
+        guard !cachedPower.onACPower, !sleepManager.clamshellOverrideActive else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "On battery, closing the lid will still sleep this Mac"
+        alert.informativeText = """
+            macOS honours the keep-awake hold only on AC power. On battery the lid puts the \
+            Mac to sleep anyway: the network goes down and whatever your agent was streaming \
+            dies mid-response.
+
+            Forced mode (pmset disablesleep) is the only thing that prevents it. It asks for \
+            your admin password and is reverted when you turn it off or quit the app.
+            """
+        alert.addButton(withTitle: "Enable forced mode")
+        alert.addButton(withTitle: "Continue anyway")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        if sleepManager.setClamshellOverride(true) {
+            Preferences.clamshellOverride = true
+        } else {
+            showAlert("Could not enable forced mode",
+                      "The pmset command requires administrator privileges. "
+                      + "If you cancelled the password prompt, try again from "
+                      + "Keep awake -> Force on battery too.")
+        }
     }
 
     private func stopAgentMode(reason: String?) {
@@ -504,7 +559,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(info("Restricted: \(powerSaver.lastResult.summary)"))
         }
         if !cachedPower.onACPower, effectiveHold, !sleepManager.clamshellOverrideActive {
-            menu.addItem(warning("On battery the lid will still sleep the Mac — enable forced mode"))
+            menu.addItem(warningButton("On battery the lid will still sleep the Mac — click to fix",
+                                       #selector(toggleClamshellOverride)))
         }
 
         menu.addItem(.separator())
@@ -853,6 +909,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return mi
     }
 
+    /// Same look as `warning`, but actually clickable.
+    private func warningButton(_ text: String, _ action: Selector) -> NSMenuItem {
+        let mi = NSMenuItem(title: text, action: action, keyEquivalent: "")
+        mi.target = self
+        mi.attributedTitle = NSAttributedString(
+            string: "⚠︎ " + text, attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium),
+                                               .foregroundColor: NSColor.systemOrange])
+        return mi
+    }
+
     private func refreshUI() {
         applyState()
         updateButton()
@@ -1135,6 +1201,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.messageText = title
         alert.informativeText = message
         alert.addButton(withTitle: "OK")
+        // An .accessory app has no Dock presence, so its panels can open behind
+        // whatever is frontmost unless we ask for activation first.
+        NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
     }
 

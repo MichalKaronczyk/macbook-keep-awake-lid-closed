@@ -107,23 +107,66 @@ A frozen process nobody resumes is a hung app for the rest of the session. So:
 The recovery path was tested: 20 processes frozen, a fresh `PowerSaver` instance read
 the state file and restored all of them.
 
+## The assertions
+
+| Assertion | What it buys |
+|---|---|
+| `PreventUserIdleSystemSleep` | Blocks idle sleep. |
+| `NetworkClientActive` | Apple documents this one as providing "CPU, disk, and network connectivity" — it is what keeps a streaming API call from being torn down when the display sleeps. On AC it holds the system in dark or full wake; on battery it only prevents *idle* sleep. |
+| `PreventSystemSleep` | What `caffeinate -s` takes. `IOPMLib.h` marks it **deprecated since 10.9** and "not supported in any OS X releases", so it is a belt-and-braces extra here, never the thing to rely on. |
+| `PreventUserIdleDisplaySleep` | Optional: keeps the display on too. |
+
+Apple is explicit that assertions are suggestions — the system may sleep anyway "under
+battery, thermal, or user circumstances". Closing the lid on battery is exactly such a
+circumstance.
+
 ## The lid-and-power limitation
 
 This is macOS, not the app:
 
-- **On AC power** — a `PreventSystemSleep` assertion is enough. Close the lid, the Mac
-  keeps working.
-- **On battery** — macOS ignores that assertion on lid close and sleeps the Mac. The
-  workaround requires root and sits under **Keep awake → Force on battery too**
-  (`pmset -a disablesleep 1`).
+- **On AC power** — the assertions are enough. Close the lid, the Mac keeps working.
+- **On battery** — macOS sleeps the Mac on lid close regardless of what is asserted.
+  The network goes down with it. The only workaround requires root and sits under
+  **Keep awake → Force on battery too** (`pmset -a disablesleep 1`).
 
-The menu shows an orange warning when the hold is active, you're on battery, and forced
-mode is off. Forced mode is reverted when the toggle is turned off and when the app
-quits. Emergency reset:
+Because a passive warning is easy to walk away from, the app also:
+
+- asks outright when you start agent mode on battery without forced mode,
+- turns the orange menu warning into a one-click fix,
+- notices (via `NSWorkspace.willSleepNotification`) when the Mac slept while the hold
+  was active, and tells you on wake why your connection dropped.
+
+Forced mode is reverted when the toggle is turned off and when the app quits.
+Emergency reset:
 
 ```bash
 sudo pmset -a disablesleep 0
 ```
+
+## Troubleshooting: the agent's connection dropped
+
+Symptom: the agent fails with something like `API Error: Connection closed
+mid-response` shortly after the lid was closed.
+
+Check whether the Mac actually slept:
+
+```bash
+pmset -g log | grep -E "Entering Sleep state|Wake from" | tail -10
+```
+
+A line such as
+
+```
+Entering Sleep state due to 'Clamshell Sleep' ... Using Batt (Charge:26%)
+```
+
+means the machine slept, which takes Wi-Fi and every TCP connection with it. Confirm
+forced mode is what's missing — `pmset -g | grep -i sleepdisabled` prints nothing when
+it is off — then enable **Keep awake → Force on battery too**, or stay on AC power.
+
+Related settings worth knowing about (`pmset -g`): `tcpkeepalive 0` tears down TCP
+connections during sleep, and `standby`/`hibernatemode` decide how deep that sleep
+goes. None of them keep a streaming HTTPS response alive — only not sleeping does.
 
 ## Verifying it works
 

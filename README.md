@@ -63,12 +63,14 @@ protected by default; anything can be overridden per app.
 
 ## One macOS limitation
 
-- **On AC power** — the sleep assertion is enough. Close the lid, the Mac keeps working.
-- **On battery** — macOS ignores it and sleeps anyway. The workaround needs root and
-  lives under **Keep awake → Force on battery too** (`pmset -a disablesleep 1`).
+- **On AC power** — the assertions are enough. Close the lid, the Mac keeps working.
+- **On battery** — macOS sleeps anyway, no matter what any app asserts. Wi-Fi goes down
+  with it, so a running agent dies with `API Error: Connection closed mid-response`.
 
-The menu warns you when you're on battery without it. If anything ever gets stuck:
-`sudo pmset -a disablesleep 0`.
+The only thing that prevents it is forced mode (`pmset -a disablesleep 1`, needs root)
+under **Keep awake → Force on battery too**. Starting agent mode on battery offers to
+turn it on, and if the Mac ever sleeps behind your back you get a notification saying
+why. If anything gets stuck: `sudo pmset -a disablesleep 0`.
 
 ## Safety
 

@@ -5,16 +5,29 @@ import IOKit.pwr_mgt
 ///
 /// Layers:
 ///  1. `PreventUserIdleSystemSleep` – blocks idle sleep.
-///  2. `PreventSystemSleep`         – blocks system sleep, including on lid close, but
-///                                    only while the laptop is on AC power.
-///                                    (Exactly what `caffeinate -s` does.)
-///  3. `PreventUserIdleDisplaySleep`– optional: keep the display on too.
-///  4. `pmset -a disablesleep 1`    – the "hard" mode: the lid will not sleep the Mac
-///                                    even on battery. Needs admin rights, so opt-in.
+///  2. `NetworkClientActive`        – the assertion Apple documents as providing "CPU,
+///                                    disk, and network connectivity". This is the one
+///                                    that keeps a streaming API call from being torn
+///                                    down when the display sleeps. On AC it holds the
+///                                    system in dark or full wake; on battery it only
+///                                    prevents *idle* sleep.
+///  3. `PreventSystemSleep`         – what `caffeinate -s` takes. IOPMLib.h marks it
+///                                    deprecated since 10.9 and "not supported in any
+///                                    OS X releases", so it is a belt-and-braces extra,
+///                                    never the thing we rely on.
+///  4. `PreventUserIdleDisplaySleep`– optional: keep the display on too.
+///  5. `pmset -a disablesleep 1`    – the "hard" mode and the *only* thing that stops a
+///                                    lid close from sleeping the Mac on battery. Needs
+///                                    admin rights, so opt-in.
+///
+/// Every IOKit assertion is a suggestion: Apple's own docs say the system may sleep
+/// anyway under battery, thermal or user circumstances. Closing the lid on battery is
+/// exactly such a circumstance — only layer 5 survives it.
 final class SleepManager {
 
     private var idleAssertion: IOPMAssertionID = IOPMAssertionID(0)
     private var systemAssertion: IOPMAssertionID = IOPMAssertionID(0)
+    private var networkAssertion: IOPMAssertionID = IOPMAssertionID(0)
     private var displayAssertion: IOPMAssertionID = IOPMAssertionID(0)
 
     private(set) var holdsDisplay = false
@@ -25,6 +38,7 @@ final class SleepManager {
     // The "PreventSystemSleep" constant is exposed inconsistently across IOKit
     // headers, so use the literal — it has been stable API for years.
     private let preventSystemSleepType = "PreventSystemSleep" as CFString
+    private let networkClientActiveType = kIOPMAssertNetworkClientActive as CFString
     private let preventIdleSleepType = kIOPMAssertionTypePreventUserIdleSystemSleep as CFString
     private let preventDisplaySleepType = kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString
 
@@ -39,6 +53,10 @@ final class SleepManager {
             IOPMAssertionCreateWithName(preventSystemSleepType, IOPMAssertionLevel(kIOPMAssertionLevelOn),
                                         reason, &systemAssertion)
         }
+        if networkAssertion == 0 {
+            IOPMAssertionCreateWithName(networkClientActiveType, IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                                        reason, &networkAssertion)
+        }
         if idleAssertion == 0 {
             IOPMAssertionCreateWithName(preventIdleSleepType, IOPMAssertionLevel(kIOPMAssertionLevelOn),
                                         reason, &idleAssertion)
@@ -52,6 +70,10 @@ final class SleepManager {
         if idleAssertion != 0 {
             IOPMAssertionRelease(idleAssertion)
             idleAssertion = IOPMAssertionID(0)
+        }
+        if networkAssertion != 0 {
+            IOPMAssertionRelease(networkAssertion)
+            networkAssertion = IOPMAssertionID(0)
         }
         if systemAssertion != 0 {
             IOPMAssertionRelease(systemAssertion)
