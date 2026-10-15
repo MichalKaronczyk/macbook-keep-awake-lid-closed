@@ -46,7 +46,7 @@ final class PowerSaver {
 
     /// Process work happens off the main thread — `taskpolicy` is a subprocess and a
     /// Slack or Cursor tree is a dozen-plus PIDs.
-    private let queue = DispatchQueue(label: "eu.rynex-system.ClaudeNotClose.powersaver",
+    private let queue = DispatchQueue(label: "com.michalkaronczyk.ClaudeNotClose.powersaver",
                                       qos: .userInitiated)
 
     private let stateURL: URL = {

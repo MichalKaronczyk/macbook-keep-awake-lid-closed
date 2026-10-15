@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>ClaudeNotClose</string>
 	<key>CFBundleIdentifier</key>
-	<string>eu.rynex-system.ClaudeNotClose</string>
+	<string>com.michalkaronczyk.ClaudeNotClose</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>

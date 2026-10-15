@@ -87,7 +87,7 @@ sudo pmset -a disablesleep 0    # if forced mode was on
 sudo pmset -a lowpowermode 0    # if Low Power Mode was on
 sudo mdutil -a -i on            # if Spotlight was paused
 rm -rf "/Applications/Claude Not Close.app" ~/Library/Application\ Support/ClaudeNotClose
-defaults delete eu.rynex-system.ClaudeNotClose
+defaults delete com.michalkaronczyk.ClaudeNotClose
 ```
 
 ---
