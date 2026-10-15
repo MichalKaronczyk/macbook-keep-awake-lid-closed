@@ -1,4 +1,17 @@
+# Build output
 .build/
 build/
+
+# Swift Package Manager / Xcode
+.swiftpm/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+
+# Editors
+.vscode/
+.idea/
+
+# macOS
 .DS_Store
-*.icns.tmp
