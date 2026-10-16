@@ -30,6 +30,13 @@ cd macbook-keep-awake-lid-closed
 
 Builds, copies to `/Applications`, launches. For autostart: **Settings → Launch at login**.
 
+Or download the zip from [Releases](https://github.com/MichalKaronczyk/macbook-keep-awake-lid-closed/releases),
+unpack it into `/Applications` and clear the quarantine flag (the app is ad-hoc signed, not notarized):
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Claude Not Close.app"
+```
+
 ## What you get
 
 <img src="docs/menu.png" alt="The menu bar dropdown" width="420" align="right">
