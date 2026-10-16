@@ -108,14 +108,15 @@ final class SleepManager {
         return false
     }
 
-    /// Sets `pmset -a disablesleep`. Prompts for the admin password (once per
-    /// authorization session).
+    /// Sets `pmset -a disablesleep`. Uses the passwordless sudoers rule that `install.sh`
+    /// adds; without it, falls back to the admin password dialog.
     /// - Returns: `true` if the requested state was applied.
     @discardableResult
     func setClamshellOverride(_ enabled: Bool) -> Bool {
         let value = enabled ? "1" : "0"
         let script = "do shell script \"/usr/bin/pmset -a disablesleep \(value)\" with administrator privileges"
-        let ok = Shell.run("/usr/bin/osascript", ["-e", script]) != nil
+        let ok = Shell.run("/usr/bin/sudo", ["-n", "/usr/bin/pmset", "-a", "disablesleep", value]) != nil
+            || Shell.run("/usr/bin/osascript", ["-e", script]) != nil
         if ok {
             clamshellOverrideActive = enabled
         }

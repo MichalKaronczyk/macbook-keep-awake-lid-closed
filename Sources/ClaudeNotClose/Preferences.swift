@@ -21,6 +21,13 @@ enum Preferences {
         static let showRuntimeInMenuBar = "showRuntimeInMenuBar"
         static let useLowPowerMode = "useLowPowerMode"
         static let pauseSpotlight = "pauseSpotlight"
+        static let remotePushEnabled = "remotePushEnabled"
+        static let answerFromPhone = "answerFromPhone"
+        static let pushOnFinish = "pushOnFinish"
+        static let pushOnAttention = "pushOnAttention"
+        static let hookPort = "hookPort"
+        static let hookToken = "hookToken"
+        static let telegramChatId = "telegramChatId"
     }
 
     static func registerDefaults() {
@@ -41,6 +48,12 @@ enum Preferences {
             Key.showRuntimeInMenuBar: true,
             Key.useLowPowerMode: false,        // needs a password, so opt-in
             Key.pauseSpotlight: false,
+            Key.remotePushEnabled: false,
+            Key.answerFromPhone: true,
+            Key.pushOnFinish: true,
+            Key.pushOnAttention: true,
+            Key.hookPort: 47821,
+            Key.telegramChatId: "",
         ])
     }
 
@@ -78,6 +91,47 @@ enum Preferences {
     static var pauseSpotlight: Bool {
         get { d.bool(forKey: Key.pauseSpotlight) }
         set { d.set(newValue, forKey: Key.pauseSpotlight) }
+    }
+
+    /// Push a message to the phone when the lid closes.
+    static var remotePushEnabled: Bool {
+        get { d.bool(forKey: Key.remotePushEnabled) }
+        set { d.set(newValue, forKey: Key.remotePushEnabled) }
+    }
+
+    /// Answer questions and approvals from Telegram while the user is away.
+    static var answerFromPhone: Bool {
+        get { d.bool(forKey: Key.answerFromPhone) }
+        set { d.set(newValue, forKey: Key.answerFromPhone) }
+    }
+
+    static var pushOnFinish: Bool {
+        get { d.bool(forKey: Key.pushOnFinish) }
+        set { d.set(newValue, forKey: Key.pushOnFinish) }
+    }
+
+    /// Notifications, questions while at the Mac, and failures.
+    static var pushOnAttention: Bool {
+        get { d.bool(forKey: Key.pushOnAttention) }
+        set { d.set(newValue, forKey: Key.pushOnAttention) }
+    }
+
+    static var hookPort: Int {
+        get { d.integer(forKey: Key.hookPort) }
+        set { d.set(newValue, forKey: Key.hookPort) }
+    }
+
+    /// Random path segment so other local processes cannot post to the hook endpoint.
+    static var hookToken: String {
+        if let t = d.string(forKey: Key.hookToken), !t.isEmpty { return t }
+        let t = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        d.set(t, forKey: Key.hookToken)
+        return t
+    }
+
+    static var telegramChatId: String {
+        get { d.string(forKey: Key.telegramChatId) ?? "" }
+        set { d.set(newValue, forKey: Key.telegramChatId) }
     }
 
     /// Keep the display on as well.

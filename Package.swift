@@ -14,6 +14,11 @@ let package = Package(
                 .linkedFramework("ServiceManagement"),
                 .linkedFramework("UserNotifications"),
             ]
-        )
+        ),
+        .testTarget(
+            name: "ClaudeNotCloseTests",
+            dependencies: ["ClaudeNotClose"],
+            path: "Tests/ClaudeNotCloseTests"
+        ),
     ]
 )

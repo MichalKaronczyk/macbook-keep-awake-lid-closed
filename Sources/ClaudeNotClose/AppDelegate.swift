@@ -52,6 +52,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// kills the agent's network connection — we explain that after the wake.
     private var sleptWhileHolding = false
 
+    /// Display asleep or lid shut: the user is not looking at the Mac.
+    private var screensAsleep = false
+
+    private let hookServer = HookServer()
+
     // MARK: - Telemetry and session
 
     private var lastClaudeCount = 0
@@ -75,6 +80,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sleepManager.syncClamshellOverrideState()
         systemTweaks.syncState()
         Notifier.requestAuthorizationIfNeeded()
+        AgentBridge.userAway = { [weak self] in
+            AgentBridge.macIsAway() || self?.screensAsleep == true
+        }
+        AgentBridge.agentModeActive = { [weak self] in self?.agentModeOn == true }
+        installEditMenu()
+        hookServer.start()
+        Task { await MessageLog.shared.watch() }
 
         // Safety net: resume anything left frozen by a previous instance that crashed.
         let recovered = powerSaver.recoverFromPreviousRun()
@@ -109,6 +121,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Single cleanup path — called from termination and from the signal handlers.
+    /// An accessory app has no main menu, so Cmd+V / Cmd+C / Cmd+A would do nothing in text fields.
+    private func installEditMenu() {
+        let main = NSMenu()
+        let editItem = NSMenuItem()
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = edit
+        main.addItem(editItem)
+        NSApp.mainMenu = main
+    }
+
     private func shutdownCleanly() {
         powerSaver.releaseSynchronously()
         sleepManager.endHold()
@@ -148,6 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The display went dark — usually that means the lid just closed. This is the
     /// moment power saving pays off most: nobody is looking, the agent is working.
     @objc private func screensDidSleep() {
+        screensAsleep = true
         guard Preferences.autoArmOnLidClose else { return }
         guard effectiveHold else { return }
         guard !powerSaver.isEngaged else { return }
@@ -157,6 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Lid open — hand everything back to the user immediately.
     @objc private func screensDidWake() {
+        screensAsleep = false
         guard powerSaveAutoArmed, powerSaver.isEngaged else { return }
         powerSaveAutoArmed = false
         stopPowerSaving(announce: true)
@@ -547,6 +575,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hogs.image = symbolImage("flame")
         hogs.submenu = hogsSubmenu()
         menu.addItem(hogs)
+
+        let push = NSMenuItem(title: "Phone push (Telegram)", action: nil, keyEquivalent: "")
+        push.image = symbolImage("paperplane")
+        push.submenu = pushSubmenu()
+        menu.addItem(push)
 
         menu.addItem(.separator())
 
@@ -1094,6 +1127,137 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .filter { !$0.isEmpty }
         Preferences.watchedProcesses = names.isEmpty ? ["claude"] : names
         pollEnvironment()
+    }
+
+    // MARK: - Phone push
+
+    private func pushSubmenu() -> NSMenu {
+        let sub = NSMenu()
+
+        func toggle(_ title: String, _ action: Selector, _ on: Bool) -> NSMenuItem {
+            let mi = item(title, action)
+            mi.state = on ? .on : .off
+            return mi
+        }
+
+        sub.addItem(toggle("Send to Telegram", #selector(togglePush), Preferences.remotePushEnabled))
+        sub.addItem(.separator())
+        sub.addItem(toggle("Answer questions from the phone", #selector(toggleAnswerFromPhone),
+                           Preferences.answerFromPhone))
+        sub.addItem(toggle("Tell me when Claude finishes", #selector(togglePushOnFinish),
+                           Preferences.pushOnFinish))
+        sub.addItem(toggle("Tell me when Claude needs me or fails", #selector(togglePushOnAttention),
+                           Preferences.pushOnAttention))
+        sub.addItem(.separator())
+
+        let hooksOn = HooksInstaller.isInstalled()
+        sub.addItem(toggle("Claude Code hooks installed", #selector(toggleHooks), hooksOn))
+        sub.addItem(item("Set up bot…", #selector(configureTelegram)))
+        let test = item("Send test message", #selector(sendPushTest))
+        test.isEnabled = TelegramClient.isConfigured
+        sub.addItem(test)
+
+        if Preferences.remotePushEnabled {
+            if !TelegramClient.isConfigured {
+                sub.addItem(info("Setup incomplete: token and chat id"))
+            } else if !hooksOn {
+                sub.addItem(info("Install the hooks to get events"))
+            }
+        }
+        return sub
+    }
+
+    @objc private func togglePush() { Preferences.remotePushEnabled.toggle() }
+    @objc private func toggleAnswerFromPhone() { Preferences.answerFromPhone.toggle() }
+    @objc private func togglePushOnFinish() { Preferences.pushOnFinish.toggle() }
+    @objc private func togglePushOnAttention() { Preferences.pushOnAttention.toggle() }
+
+    @objc private func toggleHooks() {
+        do {
+            if HooksInstaller.isInstalled() {
+                try HooksInstaller.uninstall()
+                showPushResult("Hooks removed from ~/.claude/settings.json.")
+            } else {
+                let alert = NSAlert()
+                alert.messageText = "Install Claude Code hooks?"
+                alert.informativeText = "This adds hooks for questions, permissions, notifications and "
+                    + "stop events to ~/.claude/settings.json. Each one posts to this app on "
+                    + "127.0.0.1 only. A backup is saved as settings.json.cnc-backup, and other "
+                    + "hooks are left alone. Running Claude Code sessions pick them up on restart."
+                alert.addButton(withTitle: "Install")
+                alert.addButton(withTitle: "Cancel")
+                NSApp.activate(ignoringOtherApps: true)
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+                try HooksInstaller.install()
+                showPushResult("Hooks installed. Restart running Claude Code sessions.")
+            }
+        } catch {
+            showPushResult("Could not update ~/.claude/settings.json (is it valid JSON?).")
+        }
+    }
+
+    @objc private func configureTelegram() {
+        let alert = NSAlert()
+        alert.messageText = "Telegram bot"
+        alert.informativeText = "Create a bot with @BotFather and paste its token. Send any "
+            + "message to the bot, then press Detect, or type your chat id."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Detect chat id")
+        alert.addButton(withTitle: "Cancel")
+
+        let token = NSTextField(frame: NSRect(x: 0, y: 28, width: 300, height: 24))
+        token.placeholderString = "Bot token"
+        token.stringValue = TelegramClient.token ?? ""
+        let chat = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        chat.placeholderString = "Chat id"
+        chat.stringValue = Preferences.telegramChatId
+        let box = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 52))
+        box.addSubview(token)
+        box.addSubview(chat)
+        alert.accessoryView = box
+        alert.window.initialFirstResponder = token
+
+        // Menu bar apps are not active by default, so the dialog would not get the keyboard.
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        guard response != .alertThirdButtonReturn else { return }
+        let tokenValue = token.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        TelegramClient.token = tokenValue
+        Preferences.telegramChatId = chat.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard response == .alertSecondButtonReturn else { return }
+        Task { @MainActor in
+            let result = await TelegramClient.detectChatId(token: tokenValue)
+            if let id = result.id {
+                Preferences.telegramChatId = id
+                self.showPushResult("Chat id saved: \(id)")
+            } else {
+                self.showPushResult(result.error ?? "Could not detect the chat id")
+            }
+        }
+    }
+
+    @objc private func sendPushTest() {
+        Task { @MainActor in
+            do {
+                try await TelegramClient.send(AgentBridge.card(icon: "🔔", title: "Claude Not Close",
+                                                              body: "Test message. Phone push works."))
+                self.showPushResult("Test message sent")
+            } catch let failure as TelegramClient.Failure {
+                self.showPushResult("Failed: \(failure.text)")
+            } catch {
+                self.showPushResult("Failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func showPushResult(_ text: String) {
+        let alert = NSAlert()
+        alert.messageText = "Phone push"
+        alert.informativeText = text
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     @objc private func toggleNotifications() {

@@ -2,3 +2,9 @@
 build/
 .DS_Store
 *.icns.tmp
+
+# OpenSpec and Claude tooling
+openspec/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
